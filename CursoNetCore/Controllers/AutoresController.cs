@@ -7,6 +7,7 @@ using CursoNetCore.Contexts;
 using CursoNetCore.Entities;
 using CursoNetCore.Models;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -54,24 +55,50 @@ namespace CursoNetCore.Controllers
         }
 
         [HttpPut("{id}")]
-        public ActionResult Put(int id, [FromBody] Autor value)
+        public ActionResult Put(int id, [FromBody] AutorCreacionDTO value)
         {
-            if (id != value.Id)
+            var autor = mapper.Map<Autor>(value);
+            autor.Id = id;
+            context.Entry(autor).State = EntityState.Modified;
+            context.SaveChanges();
+            return NoContent();
+        }
+
+        [HttpPatch("{id}")]
+        public async Task<ActionResult> Patch(int id, [FromBody] JsonPatchDocument<AutorCreacionDTO> patchDocument)
+        {
+            if(patchDocument == null)
             {
                 return BadRequest();
             }
-            context.Entry(value).State = EntityState.Modified;
-            context.SaveChanges();
-            return Ok();
-        }
+            var autorDeLaDB = await context.Autores.FirstOrDefaultAsync(x => x.Id == id);
+            if (autorDeLaDB == null)
+            {
+                return NotFound();
+            }
+            var autorDTO = mapper.Map<AutorCreacionDTO>(autorDeLaDB);
+            patchDocument.ApplyTo(autorDTO, ModelState);
+            var isValid = TryValidateModel(autorDeLaDB);
+            if (!isValid)
+            {
+                return BadRequest(ModelState);
+            }
+            mapper.Map(autorDTO, autorDeLaDB);
+            await context.SaveChangesAsync();
+            return NoContent();
+          }
 
         [HttpDelete("{id}")]
-        public ActionResult<Autor> Delete(int id)
+        public async Task<ActionResult<Autor>> Delete(int id)
         {
-            var autor = context.Autores.FirstOrDefault(x => x.Id == id);
-            context.Autores.Remove(autor);
-            context.SaveChanges();
-            return autor;
+            var autorId = await context.Autores.Select(x=> x.Id).FirstOrDefaultAsync(x => x == id);
+            if(autorId == default(int))
+            {
+                return NotFound();
+            }
+            context.Remove(new Autor { Id = autorId });
+            await context.SaveChangesAsync();
+            return NoContent();
         }
 
 
